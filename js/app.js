@@ -679,11 +679,13 @@ function exportCalendar() {
 
 function generateShareUrl() {
     const p = new URLSearchParams();
-    p.set('cities', selectedCities.map(c => `${c.name}|${c.country}|${c.participant || ''}`).join(','));
+    // Simple format: just city names
+    p.set('cities', selectedCities.map(c => c.name).join(','));
     p.set('date', formatDateInput(selectedDate));
-    p.set('slot', activeSlot);
     if (meetingSlots[activeSlot].time !== null) {
-        p.set('time', meetingSlots[activeSlot].time);
+        const hour = Math.floor(meetingSlots[activeSlot].time);
+        const min = Math.round((meetingSlots[activeSlot].time - hour) * 60);
+        p.set('meeting', `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`);
         p.set('duration', meetingSlots[activeSlot].duration || meetingDuration);
     }
     document.getElementById('shareUrlInput').value = location.origin + location.pathname + '?' + p.toString();
@@ -696,16 +698,41 @@ function copyShareUrl() {
 
 function loadFromUrl() {
     const p = new URLSearchParams(location.search);
+    
+    // Support simple format: ?cities=London,Tokyo,New York
     if (p.has('cities')) {
-        p.get('cities').split(',').forEach(cd => {
-            const [name, country, participant] = cd.split('|');
-            const city = cities.find(c => c.name === name && c.country === country);
-            if (city) selectedCities.push({ ...city, participant: participant || '' });
+        const cityList = p.get('cities').split(',');
+        cityList.forEach(cityInput => {
+            // Check if it's the complex format (name|country|participant)
+            if (cityInput.includes('|')) {
+                const [name, country, participant] = cityInput.split('|');
+                const city = cities.find(c => c.name === name && c.country === country);
+                if (city) selectedCities.push({ ...city, participant: participant || '' });
+            } else {
+                // Simple format: just city name
+                const cityName = cityInput.trim();
+                const city = cities.find(c => c.name.toLowerCase() === cityName.toLowerCase());
+                if (city) selectedCities.push({ ...city, participant: '' });
+            }
         });
         updateCityTags();
     }
-    if (p.has('date')) { selectedDate = new Date(p.get('date')); dateInput.value = p.get('date'); }
+    
+    if (p.has('date')) { 
+        selectedDate = new Date(p.get('date')); 
+        dateInput.value = p.get('date'); 
+    }
+    
     if (p.has('slot')) activeSlot = parseInt(p.get('slot'));
+    
+    // Support simple meeting time format: ?meeting=14:00 or ?meeting=14:30
+    if (p.has('meeting')) {
+        const meetingTime = p.get('meeting');
+        const [hours, minutes] = meetingTime.split(':').map(Number);
+        meetingSlots[activeSlot].time = hours + (minutes / 60);
+        meetingSlots[activeSlot].duration = parseFloat(p.get('duration') || '1');
+    }
+    // Also support old format
     if (p.has('time')) {
         meetingSlots[activeSlot].time = parseFloat(p.get('time'));
         meetingSlots[activeSlot].duration = parseFloat(p.get('duration') || '1');
