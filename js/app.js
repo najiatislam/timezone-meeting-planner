@@ -95,6 +95,98 @@ const cities = [
     { name: "Anchorage", country: "USA", timezone: "AKST", offset: -9, dstOffset: -8 }
 ];
 
+// ===== CUSTOM CITIES =====
+let customCities = [];
+
+function loadCustomCities() {
+    customCities = JSON.parse(localStorage.getItem('customCities') || '[]');
+}
+
+function getAllCities() {
+    return [...cities, ...customCities];
+}
+
+function saveCustomCity() {
+    const name = document.getElementById('customCityName').value.trim();
+    const country = document.getElementById('customCityCountry').value.trim();
+    const offset = parseFloat(document.getElementById('customCityOffset').value);
+    const timezone = document.getElementById('customCityTz').value.trim() || 'UTC' + (offset >= 0 ? '+' : '') + offset;
+    
+    if (!name || !country || isNaN(offset)) {
+        toast('Please fill in all required fields');
+        return;
+    }
+    
+    // Check for duplicates
+    const allCities = getAllCities();
+    if (allCities.find(c => c.name.toLowerCase() === name.toLowerCase() && c.country.toLowerCase() === country.toLowerCase())) {
+        toast('City already exists');
+        return;
+    }
+    
+    const newCity = {
+        name,
+        country,
+        timezone,
+        offset,
+        dstOffset: offset, // Custom cities don't auto-handle DST
+        isCustom: true
+    };
+    
+    customCities.push(newCity);
+    localStorage.setItem('customCities', JSON.stringify(customCities));
+    
+    // Clear form
+    document.getElementById('customCityName').value = '';
+    document.getElementById('customCityCountry').value = '';
+    document.getElementById('customCityOffset').value = '';
+    document.getElementById('customCityTz').value = '';
+    
+    updateCustomCitiesList();
+    updateConverterOptions();
+    populateTimezoneSelects();
+    toast(`Added ${name}, ${country}`);
+}
+
+function deleteCustomCity(index) {
+    const city = customCities[index];
+    customCities.splice(index, 1);
+    localStorage.setItem('customCities', JSON.stringify(customCities));
+    
+    // Remove from selected cities if present
+    selectedCities = selectedCities.filter(c => !(c.name === city.name && c.country === city.country && c.isCustom));
+    updateCityTags();
+    updateCustomCitiesList();
+    updateConverterOptions();
+    populateTimezoneSelects();
+    render();
+    toast(`Removed ${city.name}`);
+}
+
+function updateCustomCitiesList() {
+    const list = document.getElementById('customCitiesList');
+    if (customCities.length === 0) {
+        list.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">No custom cities yet</p>';
+        return;
+    }
+    list.innerHTML = customCities.map((c, i) => `
+        <div class="custom-city-item">
+            <span>${c.name}, ${c.country} (UTC${c.offset >= 0 ? '+' : ''}${c.offset})</span>
+            <button class="custom-city-remove" onclick="deleteCustomCity(${i})">×</button>
+        </div>
+    `).join('');
+}
+
+function openCustomCityModal() {
+    document.getElementById('customCityModal').classList.add('active');
+    updateCustomCitiesList();
+    dropdown.classList.remove('active');
+}
+
+function closeCustomCityModal() {
+    document.getElementById('customCityModal').classList.remove('active');
+}
+
 // ===== STATE =====
 let selectedCities = [];
 let meetingSlots = [{ time: null, duration: 1 }, { time: null, duration: 1 }, { time: null, duration: 1 }];
@@ -131,6 +223,7 @@ function escapeHtml(text) {
 
 // ===== INIT =====
 function init() {
+    loadCustomCities();
     dateInput.value = formatDateInput(new Date());
     loadFromUrl();
     loadGroups();
@@ -174,28 +267,36 @@ function handleSearch(e) {
     const q = e.target.value.toLowerCase();
     if (q.length < 1) { dropdown.classList.remove('active'); return; }
 
-    const filtered = cities.filter(c => 
+    const allCities = getAllCities();
+    const filtered = allCities.filter(c => 
         !selectedCities.find(s => s.name === c.name && s.country === c.country) &&
         (c.name.toLowerCase().includes(q) || c.country.toLowerCase().includes(q))
-    ).slice(0, 10);
+    ).slice(0, 8);
 
-    if (filtered.length > 0) {
-        dropdown.innerHTML = filtered.map(c => `
-            <div class="dropdown-item" data-city="${c.name}" data-country="${c.country}">
-                <span class="primary">${c.name}, ${c.country}</span>
-                <span class="secondary">${c.timezone} (UTC${c.offset >= 0 ? '+' : ''}${c.offset})</span>
-            </div>
-        `).join('');
-        dropdown.classList.add('active');
-    } else {
-        dropdown.classList.remove('active');
-    }
+    let html = filtered.map(c => `
+        <div class="dropdown-item" data-city="${c.name}" data-country="${c.country}">
+            <span class="primary">${c.name}, ${c.country}${c.isCustom ? ' ✦' : ''}</span>
+            <span class="secondary">${c.timezone} (UTC${c.offset >= 0 ? '+' : ''}${c.offset})</span>
+        </div>
+    `).join('');
+    
+    // Always show "Add Custom City" option
+    html += `<div class="dropdown-item add-custom" onclick="openCustomCityModal()">+ Add Custom City</div>`;
+    
+    dropdown.innerHTML = html;
+    dropdown.classList.add('active');
 }
 
 function handleCitySelect(e) {
     const item = e.target.closest('.dropdown-item');
-    if (item && selectedCities.length < 4) {
-        const city = cities.find(c => c.name === item.dataset.city && c.country === item.dataset.country);
+    if (!item) return;
+    
+    // Ignore if clicking "Add Custom City"
+    if (item.classList.contains('add-custom')) return;
+    
+    if (selectedCities.length < 4) {
+        const allCities = getAllCities();
+        const city = allCities.find(c => c.name === item.dataset.city && c.country === item.dataset.country);
         if (city) {
             selectedCities.push({ ...city, participant: '' });
             updateCityTags();
@@ -702,16 +803,17 @@ function loadFromUrl() {
     // Support simple format: ?cities=London,Tokyo,New York
     if (p.has('cities')) {
         const cityList = p.get('cities').split(',');
+        const allCities = getAllCities();
         cityList.forEach(cityInput => {
             // Check if it's the complex format (name|country|participant)
             if (cityInput.includes('|')) {
                 const [name, country, participant] = cityInput.split('|');
-                const city = cities.find(c => c.name === name && c.country === country);
+                const city = allCities.find(c => c.name === name && c.country === country);
                 if (city) selectedCities.push({ ...city, participant: participant || '' });
             } else {
                 // Simple format: just city name
                 const cityName = cityInput.trim();
-                const city = cities.find(c => c.name.toLowerCase() === cityName.toLowerCase());
+                const city = allCities.find(c => c.name.toLowerCase() === cityName.toLowerCase());
                 if (city) selectedCities.push({ ...city, participant: '' });
             }
         });
@@ -766,8 +868,9 @@ function saveGroup() {
 function loadGroup(i) {
     const groups = JSON.parse(localStorage.getItem('tzGroups') || '[]');
     const g = groups[i];
+    const allCities = getAllCities();
     selectedCities = g.cities.map(gc => {
-        const city = cities.find(c => c.name === gc.name && c.country === gc.country);
+        const city = allCities.find(c => c.name === gc.name && c.country === gc.country);
         return city ? { ...city, participant: gc.participant || '' } : null;
     }).filter(Boolean);
     updateCityTags();
@@ -785,19 +888,21 @@ function deleteGroup(i) {
 
 // ===== CONVERTER =====
 function updateConverterOptions() {
-    const opts = selectedCities.length > 0 ? selectedCities : cities.slice(0, 10);
-    converterSource.innerHTML = opts.map(c => `<option value="${c.name}|${c.country}">${c.name}</option>`).join('');
+    const allCities = getAllCities();
+    const opts = selectedCities.length > 0 ? selectedCities : allCities.slice(0, 10);
+    converterSource.innerHTML = opts.map(c => `<option value="${c.name}|${c.country}">${c.name}${c.isCustom ? ' ✦' : ''}</option>`).join('');
 }
 
 function convertTime() {
     const time = document.getElementById('converterTime').value;
     const [name, country] = converterSource.value.split('|');
-    const src = cities.find(c => c.name === name && c.country === country);
+    const allCities = getAllCities();
+    const src = allCities.find(c => c.name === name && c.country === country);
     if (!src || !time) return;
     const [h, m] = time.split(':').map(Number);
     const local = h + m / 60;
     const utc = utcFromLocal(local, getOffset(src));
-    const targets = selectedCities.length > 0 ? selectedCities : cities.slice(0, 5);
+    const targets = selectedCities.length > 0 ? selectedCities : allCities.slice(0, 5);
     const results = targets.filter(c => c.name !== src.name).map(c => ({ city: c, time: formatTime(localHour(utc, getOffset(c))) }));
     document.getElementById('converterResults').innerHTML = results.map(r => `
         <div class="converter-result">
@@ -851,41 +956,69 @@ let worldClocks = JSON.parse(localStorage.getItem('worldClocks') || '[]');
 let worldClockInterval = null;
 
 function initWorldClock() {
-    const select = document.getElementById('worldClockSelect');
-    cities.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.name;
-        opt.textContent = `${c.name}, ${c.country}`;
-        select.appendChild(opt);
-    });
+    populateTimezoneSelects();
     renderWorldClocks();
     worldClockInterval = setInterval(renderWorldClocks, 1000);
 }
 
+function populateTimezoneSelects() {
+    const allCities = getAllCities();
+    
+    // World clock select
+    const worldClockSelect = document.getElementById('worldClockSelect');
+    worldClockSelect.innerHTML = '<option value="">Add a city...</option>';
+    allCities.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = `${c.name}|${c.country}`;
+        opt.textContent = `${c.name}, ${c.country}${c.isCustom ? ' ✦' : ''}`;
+        worldClockSelect.appendChild(opt);
+    });
+    
+    // Team member timezone select
+    const memberTz = document.getElementById('memberTimezone');
+    if (memberTz) {
+        memberTz.innerHTML = '<option value="">Select timezone...</option>';
+        allCities.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = `${c.name}|${c.country}`;
+            opt.textContent = `${c.name}, ${c.country}${c.isCustom ? ' ✦' : ''}`;
+            memberTz.appendChild(opt);
+        });
+    }
+}
+
 function addWorldClock() {
     const select = document.getElementById('worldClockSelect');
-    const cityName = select.value;
-    if (!cityName || worldClocks.includes(cityName)) return;
-    worldClocks.push(cityName);
+    const value = select.value;
+    if (!value || worldClocks.includes(value)) return;
+    worldClocks.push(value);
     localStorage.setItem('worldClocks', JSON.stringify(worldClocks));
     renderWorldClocks();
     select.value = '';
 }
 
-function removeWorldClock(cityName) {
-    worldClocks = worldClocks.filter(c => c !== cityName);
+function removeWorldClock(value) {
+    worldClocks = worldClocks.filter(c => c !== value);
     localStorage.setItem('worldClocks', JSON.stringify(worldClocks));
     renderWorldClocks();
 }
 
 function renderWorldClocks() {
     const grid = document.getElementById('worldClocksGrid');
+    const allCities = getAllCities();
     if (worldClocks.length === 0) {
         grid.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);grid-column:1/-1;">Add cities to see their current time</div>';
         return;
     }
-    grid.innerHTML = worldClocks.map(cityName => {
-        const city = cities.find(c => c.name === cityName);
+    grid.innerHTML = worldClocks.map(value => {
+        // Support both old format (cityName) and new format (cityName|country)
+        let city;
+        if (value.includes('|')) {
+            const [name, country] = value.split('|');
+            city = allCities.find(c => c.name === name && c.country === country);
+        } else {
+            city = allCities.find(c => c.name === value);
+        }
         if (!city) return '';
         const now = new Date();
         const offset = isDST(now) ? city.dstOffset : city.offset;
@@ -893,10 +1026,11 @@ function renderWorldClocks() {
         const cityTime = new Date(utc + offset * 3600000);
         const timeStr = cityTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
         const dateStr = cityTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        const safeValue = value.replace(/'/g, "\\'");
         return `
             <div class="world-clock-item">
-                <button class="world-clock-remove" onclick="removeWorldClock('${cityName}')">×</button>
-                <div class="world-clock-city">${city.name}</div>
+                <button class="world-clock-remove" onclick="removeWorldClock('${safeValue}')">×</button>
+                <div class="world-clock-city">${city.name}${city.isCustom ? ' ✦' : ''}</div>
                 <div class="world-clock-time">${timeStr}</div>
                 <div class="world-clock-date">${dateStr}</div>
             </div>
@@ -981,13 +1115,7 @@ function renderCountdowns() {
 let teamMembers = JSON.parse(localStorage.getItem('teamMembers') || '[]');
 
 function initTeamDirectory() {
-    const select = document.getElementById('memberTimezone');
-    cities.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.name;
-        opt.textContent = `${c.name} (${c.timezone})`;
-        select.appendChild(opt);
-    });
+    // populateTimezoneSelects() handles the select population
     renderTeamMembers();
 }
 
@@ -1013,8 +1141,18 @@ function removeTeamMember(id) {
     renderTeamMembers();
 }
 
+function getTeamMemberCity(member) {
+    const allCities = getAllCities();
+    // Support both formats: "name|country" and legacy "name"
+    if (member.timezone && member.timezone.includes('|')) {
+        const [name, country] = member.timezone.split('|');
+        return allCities.find(c => c.name === name && c.country === country);
+    }
+    return allCities.find(c => c.name === member.timezone);
+}
+
 function getTeamMemberStatus(member) {
-    const city = cities.find(c => c.name === member.timezone);
+    const city = getTeamMemberCity(member);
     if (!city) return 'away';
     const now = new Date();
     const offset = isDST(now) ? city.dstOffset : city.offset;
@@ -1034,9 +1172,10 @@ function renderTeamMembers() {
         return;
     }
     grid.innerHTML = teamMembers.map(m => {
-        const city = cities.find(c => c.name === m.timezone);
+        const city = getTeamMemberCity(m);
         const status = getTeamMemberStatus(m);
         const initials = m.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        const cityName = city ? city.name : m.timezone;
         let localTimeStr = '';
         if (city) {
             const now = new Date();
@@ -1058,7 +1197,7 @@ function renderTeamMembers() {
                     </div>
                 </div>
                 <div class="team-info">
-                    <div class="team-info-item"><span>🌍</span><span>${m.timezone}</span></div>
+                    <div class="team-info-item"><span>🌍</span><span>${cityName}${city && city.isCustom ? ' ✦' : ''}</span></div>
                     <div class="team-info-item"><span>🕐</span><span>${localTimeStr}</span></div>
                     <div class="team-info-item"><span>📆</span><span>Working: ${m.hours}</span></div>
                     <div class="team-info-item"><span class="team-status ${status}">${status}</span></div>
@@ -1208,14 +1347,16 @@ let inviteRecipients = [];
 function initInviteGenerator() {
     const sourceSelect = document.getElementById('inviteSourceTz');
     const recipientSelect = document.getElementById('addRecipientTz');
-    cities.forEach(c => {
+    const allCities = getAllCities();
+    allCities.forEach(c => {
+        const val = `${c.name}|${c.country}`;
         const opt1 = document.createElement('option');
-        opt1.value = c.name;
-        opt1.textContent = `${c.name} (${c.timezone})`;
+        opt1.value = val;
+        opt1.textContent = `${c.name} (${c.timezone})${c.isCustom ? ' ✦' : ''}`;
         sourceSelect.appendChild(opt1);
         const opt2 = document.createElement('option');
-        opt2.value = c.name;
-        opt2.textContent = `${c.name} (${c.timezone})`;
+        opt2.value = val;
+        opt2.textContent = `${c.name} (${c.timezone})${c.isCustom ? ' ✦' : ''}`;
         recipientSelect.appendChild(opt2);
     });
     const tomorrow = new Date();
@@ -1243,13 +1384,25 @@ function renderInviteRecipients() {
         container.innerHTML = '';
         return;
     }
-    container.innerHTML = inviteRecipients.map(r => `
-        <div class="tz-recipient">
-            <span>🌍</span>
-            <span style="flex:1;">${r.timezone}</span>
-            <button class="tz-recipient-remove" onclick="removeInviteRecipient('${r.timezone}')">×</button>
-        </div>
-    `).join('');
+    container.innerHTML = inviteRecipients.map(r => {
+        const displayName = r.timezone.includes('|') ? r.timezone.split('|')[0] : r.timezone;
+        return `
+            <div class="tz-recipient">
+                <span>🌍</span>
+                <span style="flex:1;">${displayName}</span>
+                <button class="tz-recipient-remove" onclick="removeInviteRecipient('${r.timezone}')">×</button>
+            </div>
+        `;
+    }).join('');
+}
+
+function getInviteCity(value) {
+    const allCities = getAllCities();
+    if (value && value.includes('|')) {
+        const [name, country] = value.split('|');
+        return allCities.find(c => c.name === name && c.country === country);
+    }
+    return allCities.find(c => c.name === value);
 }
 
 function generateInvite() {
@@ -1262,7 +1415,7 @@ function generateInvite() {
         toast('Please fill in title, date, time, and timezone');
         return;
     }
-    const sourceData = cities.find(c => c.name === sourceCity);
+    const sourceData = getInviteCity(sourceCity);
     if (!sourceData) return;
     const meetingDate = new Date(`${date}T${time}`);
     const now = new Date();
@@ -1272,14 +1425,14 @@ function generateInvite() {
     invite += `📌 ${title}\n\n`;
     if (desc) invite += `📝 ${desc}\n\n`;
     invite += `🕐 Time:\n`;
-    invite += `   ${sourceCity}: ${meetingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}\n`;
+    invite += `   ${sourceData.name}: ${meetingDate.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}\n`;
     inviteRecipients.forEach(r => {
-        const cityData = cities.find(c => c.name === r.timezone);
+        const cityData = getInviteCity(r.timezone);
         if (!cityData) return;
         const targetOffset = isDST(now) ? cityData.dstOffset : cityData.offset;
         const diffHours = targetOffset - sourceOffset;
         const convertedTime = new Date(meetingDate.getTime() + diffHours * 3600000);
-        invite += `   ${r.timezone}: ${convertedTime.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}\n`;
+        invite += `   ${cityData.name}: ${convertedTime.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}\n`;
     });
     invite += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
     invite += `Generated by Chronos`;

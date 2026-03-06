@@ -7,7 +7,7 @@
 <h4 align="center">A smart meeting optimizer for global teams — not just another timezone viewer.</h4>
 
 <p align="center">
-  <a href="https://najiatislam.github.io/timezone-meeting-planner">Live Demo</a> •
+  <a href="https://najiatislam.github.io/chronos">Live Demo</a> •
   <a href="#key-features">Key Features</a> •
   <a href="#how-to-use">How To Use</a> •
   <a href="#tech-stack">Tech Stack</a>
@@ -126,11 +126,11 @@ Comprehensive timezone database with DST support.
 ## How To Use
 
 **Option 1: Try it online**
-👉 [najiatislam.github.io/timezone-meeting-planner](https://najiatislam.github.io/timezone-meeting-planner)
+👉 [najiatislam.github.io/chronos](https://najiatislam.github.io/chronos)
 
 **Option 2: Run locally**
 ```bash
-git clone https://github.com/najiatislam/timezone-meeting-planner.git
+git clone https://github.com/najiatislam/chronos.git
 cd chronos
 # Just open index.html in your browser - no build required!
 ```
