@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chronos - Global Meeting Planner</title>
+    <meta name="description" content="Plan meetings across time zones with ease. Compare working hours, find optimal meeting times, and coordinate with global teams.">
+    <meta name="keywords" content="timezone, meeting planner, world clock, global team, time converter">
+    <meta name="author" content="Chronos">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="brand">
+                <div class="logo"><div class="logo-clock"></div></div>
+                <div class="brand-text">
+                    <h1>Chronos</h1>
+                    <p>Global Meeting Planner</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="kbd-hints">
+                    <span><kbd>←</kbd><kbd>→</kbd> Move</span>
+                    <span><kbd>⇧</kbd>+Arrows Resize</span>
+                    <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Slots</span>
+                    <span><kbd>D</kbd> View</span>
+                </div>
+                <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌓</button>
+            </div>
+        </header>
+
+        <!-- Top Row -->
+        <div class="grid grid-2" style="margin-bottom: 20px;">
+            <!-- City Selection -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon purple">🔍</div>
+                    <div>
+                        <div class="card-title">Add Cities</div>
+                        <div class="card-subtitle">Select 2-4 cities to compare</div>
+                    </div>
+                </div>
+                <div class="search-wrapper">
+                    <span class="search-icon">🌍</span>
+                    <input type="text" id="citySearch" class="search-input" placeholder="Search cities..." autocomplete="off">
+                    <div class="dropdown" id="dropdown"></div>
+                </div>
+                <div class="city-tags" id="cityTags"></div>
+                <div class="saved-groups-section">
+                    <div class="section-label">💾 Saved Groups</div>
+                    <div class="saved-groups" id="savedGroups"></div>
+                    <div class="save-group-form">
+                        <input type="text" id="groupNameInput" placeholder="Group name...">
+                        <button class="btn btn-secondary" onclick="saveGroup()">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Converter -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon blue">⚡</div>
+                    <div>
+                        <div class="card-title">Quick Converter</div>
+                        <div class="card-subtitle">Convert time between cities</div>
+                    </div>
+                </div>
+                <div class="converter-form">
+                    <input type="time" id="converterTime" value="15:00">
+                    <span style="color: var(--text-muted)">in</span>
+                    <select id="converterSource" class="control-input"></select>
+                    <button class="btn btn-secondary" onclick="convertTime()">Convert</button>
+                </div>
+                <div class="converter-results" id="converterResults"></div>
+            </div>
+        </div>
+
+        <!-- Timeline Card -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card-header">
+                <div class="card-icon green">📊</div>
+                <div>
+                    <div class="card-title">Timeline Comparison</div>
+                    <div class="card-subtitle">Drag to select meeting time</div>
+                </div>
+            </div>
+
+            <div class="controls-bar">
+                <div class="control-group">
+                    <span class="control-label">📅 Date</span>
+                    <input type="date" id="dateInput" class="control-input">
+                </div>
+                <div class="control-group">
+                    <span class="control-label">⏱️ Duration</span>
+                    <select id="durationSelect" class="control-input">
+                        <option value="0.5">30 min</option>
+                        <option value="1" selected>1 hour</option>
+                        <option value="1.5">1.5 hours</option>
+                        <option value="2">2 hours</option>
+                        <option value="3">3 hours</option>
+                    </select>
+                </div>
+                <div class="view-tabs">
+                    <button class="view-tab active" data-view="day" onclick="setView('day')">Day</button>
+                    <button class="view-tab" data-view="week" onclick="setView('week')">Week</button>
+                </div>
+                <div class="control-group">
+                    <span class="control-label">🕐 Working Hours</span>
+                    <input type="number" id="workStart" class="control-input working-hours-input" value="9" min="0" max="23">
+                    <span style="color: var(--text-muted)">to</span>
+                    <input type="number" id="workEnd" class="control-input working-hours-input" value="17" min="0" max="23">
+                </div>
+            </div>
+
+            <div class="timeline-container">
+                <div id="timelineArea">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🌐</div>
+                        <p class="empty-state-text">Add at least 2 cities to compare time zones and find the perfect meeting time</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-item"><div class="legend-dot working"></div>Working Hours</div>
+                <div class="legend-item"><div class="legend-dot overlap"></div>Overlap</div>
+                <div class="legend-item"><div class="legend-dot night"></div>Night</div>
+                <div class="legend-item"><div class="legend-dot meeting"></div>Meeting</div>
+                <div class="legend-item"><div class="legend-dot weekend"></div>Weekend</div>
+            </div>
+        </div>
+
+        <!-- Bottom Row -->
+        <div class="grid grid-2">
+            <!-- Best Times -->
+            <div class="card" id="suggestionsCard" style="display: none;">
+                <div class="card-header">
+                    <div class="card-icon green">💡</div>
+                    <div>
+                        <div class="card-title">Best Meeting Times</div>
+                        <div class="card-subtitle">Recommended overlap windows</div>
+                    </div>
+                </div>
+                <div class="suggestions-list" id="suggestionsList"></div>
+            </div>
+
+            <!-- Meeting Info -->
+            <div class="card" id="meetingCard" style="display: none;">
+                <div class="card-header">
+                    <div class="card-icon amber">📅</div>
+                    <div>
+                        <div class="card-title">Meeting Details</div>
+                        <div class="card-subtitle">Selected time slot info</div>
+                    </div>
+                </div>
+                <div class="slot-tabs" id="slotTabs"></div>
+                <div class="meeting-details-list" id="meetingDetails"></div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="copyDetails()">📋 Copy</button>
+                    <button class="btn btn-secondary" onclick="exportCalendar()">📆 Export .ics</button>
+                    <button class="btn btn-secondary" onclick="generateShareUrl()">🔗 Share</button>
+                    <button class="btn btn-danger" onclick="clearSlot()">✕ Clear</button>
+                </div>
+                <div class="share-url-wrapper" id="shareUrlWrapper">
+                    <input type="text" id="shareUrlInput" readonly>
+                    <button class="btn btn-secondary" onclick="copyShareUrl()">Copy</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- World Clock Dashboard -->
+        <div class="world-clock-section">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: rgba(99, 102, 241, 0.15);">🌍</div>
+                    <div>
+                        <div class="card-title">World Clock</div>
+                        <div class="card-subtitle">Pin cities to track time at a glance</div>
+                    </div>
+                </div>
+                <div class="world-clocks-grid" id="worldClocksGrid"></div>
+                <div class="world-clock-add">
+                    <select id="worldClockSelect" class="search-input">
+                        <option value="">Add a city...</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="addWorldClock()">Add</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Meeting Countdown -->
+        <div class="countdown-section">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: rgba(245, 158, 11, 0.15);">⏱️</div>
+                    <div>
+                        <div class="card-title">Meeting Countdown</div>
+                        <div class="card-subtitle">Track upcoming meetings</div>
+                    </div>
+                </div>
+                <div id="countdownList"></div>
+                <div class="meeting-form" id="meetingForm">
+                    <input type="text" id="meetingTitle" class="search-input" placeholder="Meeting title">
+                    <div class="meeting-form-row">
+                        <input type="date" id="meetingDate" class="search-input">
+                        <input type="time" id="meetingTime" class="search-input">
+                    </div>
+                    <button class="btn btn-primary" onclick="addMeeting()">Add Meeting</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Team Directory -->
+        <div class="team-section">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: rgba(16, 185, 129, 0.15);">👥</div>
+                    <div>
+                        <div class="card-title">Team Directory</div>
+                        <div class="card-subtitle">Manage your global team</div>
+                    </div>
+                </div>
+                <div class="team-grid" id="teamGrid"></div>
+                <div class="team-form" id="teamForm">
+                    <input type="text" id="memberName" class="search-input" placeholder="Name">
+                    <input type="text" id="memberRole" class="search-input" placeholder="Role (optional)">
+                    <select id="memberTimezone" class="search-input">
+                        <option value="">Select timezone...</option>
+                    </select>
+                    <input type="text" id="memberHours" class="search-input" placeholder="Working hours (e.g., 9-17)">
+                    <button class="btn btn-primary full-width" onclick="addTeamMember()">Add Team Member</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Holiday Calendar -->
+        <div class="holiday-section">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: rgba(239, 68, 68, 0.15);">🗓️</div>
+                    <div>
+                        <div class="card-title">Holiday Calendar</div>
+                        <div class="card-subtitle">Public holidays by country</div>
+                    </div>
+                </div>
+                <div class="holiday-filters">
+                    <select id="holidayCountry" class="search-input" onchange="loadHolidays()">
+                        <option value="US">United States</option>
+                        <option value="UK">United Kingdom</option>
+                        <option value="DE">Germany</option>
+                        <option value="FR">France</option>
+                        <option value="JP">Japan</option>
+                        <option value="AU">Australia</option>
+                        <option value="CA">Canada</option>
+                        <option value="IN">India</option>
+                    </select>
+                    <select id="holidayYear" class="search-input" onchange="loadHolidays()">
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                    </select>
+                </div>
+                <div class="holiday-list" id="holidayList"></div>
+            </div>
+        </div>
+
+        <!-- Meeting Invite Generator -->
+        <div class="invite-section">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.15);">📧</div>
+                    <div>
+                        <div class="card-title">Meeting Invite Generator</div>
+                        <div class="card-subtitle">Create invites with timezone conversions</div>
+                    </div>
+                </div>
+                <div class="invite-form">
+                    <input type="text" id="inviteTitle" class="search-input" placeholder="Meeting title">
+                    <div class="invite-form-row">
+                        <input type="date" id="inviteDate" class="search-input">
+                        <input type="time" id="inviteTime" class="search-input" value="09:00">
+                    </div>
+                    <select id="inviteSourceTz" class="search-input">
+                        <option value="">Your timezone...</option>
+                    </select>
+                    <textarea id="inviteDescription" class="search-input" rows="3" placeholder="Meeting description (optional)"></textarea>
+                </div>
+                <div class="timezone-list" id="inviteRecipients"></div>
+                <div class="invite-form-row" style="margin-top: 12px;">
+                    <select id="addRecipientTz" class="search-input">
+                        <option value="">Add recipient timezone...</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="addInviteRecipient()">Add</button>
+                </div>
+                <div class="invite-preview" id="invitePreview" style="display: none;"></div>
+                <div class="invite-actions">
+                    <button class="btn btn-primary" onclick="generateInvite()">Generate Invite</button>
+                    <button class="btn btn-secondary" onclick="copyInvite()">Copy to Clipboard</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Availability Windows -->
+        <div class="availability-section">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: rgba(6, 182, 212, 0.15);">📊</div>
+                    <div>
+                        <div class="card-title">Availability Windows</div>
+                        <div class="card-subtitle">Find overlapping availability</div>
+                    </div>
+                </div>
+                <div class="availability-actions">
+                    <div class="availability-person-select" id="availabilityPersons"></div>
+                    <button class="btn btn-secondary" onclick="addAvailabilityPerson()">+ Add Person</button>
+                    <button class="btn btn-primary" onclick="findOverlapAvailability()">Find Overlap</button>
+                </div>
+                <div class="availability-grid" id="availabilityGrid"></div>
+                <div class="availability-legend">
+                    <div class="availability-legend-item">
+                        <div class="availability-legend-color" style="background: var(--accent-primary);"></div>
+                        <span>Your availability</span>
+                    </div>
+                    <div class="availability-legend-item">
+                        <div class="availability-legend-color" style="background: var(--accent-secondary);"></div>
+                        <span>Team overlap</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
